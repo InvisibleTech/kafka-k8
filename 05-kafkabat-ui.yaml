@@ -1,0 +1,102 @@
+# 05-kafbat-ui.yaml
+---
+# ConfigMap for Kafbat UI configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafbat-ui-config
+  labels:
+    app: kafbat-ui
+data:
+  config.yml: |
+    kafka:
+      clusters:
+        - name: local-kafka
+          bootstrapServers: kafka-0.kafka-headless.default.svc.cluster.local:9092,kafka-1.kafka-headless.default.svc.cluster.local:9092,kafka-2.kafka-headless.default.svc.cluster.local:9092
+          properties:
+            security.protocol: PLAINTEXT
+          metrics:
+            port: 9997
+            type: JMX
+    auth:
+      type: disabled
+    management:
+      health:
+        ldap:
+          enabled: false
+
+---
+# Deployment for Kafbat UI
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafbat-ui
+  labels:
+    app: kafbat-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafbat-ui
+  template:
+    metadata:
+      labels:
+        app: kafbat-ui
+    spec:
+      containers:
+      - name: kafbat-ui
+        image: ghcr.io/kafbat/kafka-ui:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: DYNAMIC_CONFIG_ENABLED
+          value: "true"
+        - name: SPRING_CONFIG_ADDITIONAL-LOCATION
+          value: /etc/kafbat/config.yml
+        volumeMounts:
+        - name: config
+          mountPath: /etc/kafbat
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 10
+      volumes:
+      - name: config
+        configMap:
+          name: kafbat-ui-config
+
+---
+# Service for Kafbat UI
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafbat-ui
+  labels:
+    app: kafbat-ui
+spec:
+  type: NodePort
+  selector:
+    app: kafbat-ui
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
+    name: http

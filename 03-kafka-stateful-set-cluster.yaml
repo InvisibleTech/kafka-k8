@@ -1,0 +1,143 @@
+# 02-kafka-statefulset.yaml
+---
+# StatefulSet for Kafka brokers
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+spec:
+  serviceName: kafka-headless
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+      - name: kafka
+        image: apache/kafka:3.8.1
+        ports:
+        - containerPort: 9092
+          name: internal
+        - containerPort: 9093
+          name: controller
+        - containerPort: 9094
+          name: external
+        env:
+        # Cluster ID for KRaft mode
+        - name: CLUSTER_ID
+          value: "MkU3OEVBNTcwNTJENDM2Qk"
+
+        # Pod name for use in other env vars
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+        # Node ID will be set in startup script
+
+        # Process roles - combined mode (broker + controller)
+        - name: KAFKA_PROCESS_ROLES
+          value: "broker,controller"
+
+        # Listeners configuration - INTERNAL for cluster, EXTERNAL for outside access
+        - name: KAFKA_LISTENERS
+          value: "INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
+
+        # Note: KAFKA_ADVERTISED_LISTENERS will be set dynamically in the startup script
+
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT"
+
+        # Inter-broker communication uses INTERNAL listener
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+          value: "INTERNAL"
+
+        - name: KAFKA_CONTROLLER_LISTENER_NAMES
+          value: "CONTROLLER"
+
+        # Controller quorum voters - all 3 nodes
+        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+          value: "0@kafka-0.kafka-headless.default.svc.cluster.local:9093,1@kafka-1.kafka-headless.default.svc.cluster.local:9093,2@kafka-2.kafka-headless.default.svc.cluster.local:9093"
+
+        # Replication settings
+        - name: KAFKA_DEFAULT_REPLICATION_FACTOR
+          value: "3"
+
+        - name: KAFKA_MIN_INSYNC_REPLICAS
+          value: "2"
+
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "3"
+
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "3"
+
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "2"
+
+        # Log directories
+        - name: KAFKA_LOG_DIRS
+          value: "/var/lib/kafka/data"
+
+        # Increase broker registration timeout for initial startup
+        - name: KAFKA_INITIAL_BROKER_REGISTRATION_TIMEOUT_MS
+          value: "180000"
+
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /var/lib/kafka/data
+
+        # Startup command to set node ID and advertised listeners dynamically
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          export KAFKA_NODE_ID=${POD_NAME##*-}
+          export EXTERNAL_PORT=$((30092 + KAFKA_NODE_ID))
+
+          # Set advertised listeners with expanded variables
+          export KAFKA_ADVERTISED_LISTENERS="INTERNAL://${POD_NAME}.kafka-headless.default.svc.cluster.local:9092,EXTERNAL://localhost:${EXTERNAL_PORT}"
+
+          echo "Node ID: $KAFKA_NODE_ID"
+          echo "External Port: $EXTERNAL_PORT"
+          echo "Advertised Listeners: $KAFKA_ADVERTISED_LISTENERS"
+
+          exec /etc/kafka/docker/run
+
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          failureThreshold: 6
+
+        readinessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 12
+
+  # Volume claim templates for persistent storage
+  volumeClaimTemplates:
+  - metadata:
+      name: kafka-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi

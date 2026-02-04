@@ -1,0 +1,54 @@
+# 04-kafka-external-services.yaml
+---
+# External NodePort service for kafka-0
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-0-external
+  labels:
+    app: kafka
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: kafka-0
+  ports:
+  - port: 9094
+    targetPort: 9094
+    nodePort: 30092
+    name: external
+
+---
+# External NodePort service for kafka-1
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-1-external
+  labels:
+    app: kafka
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: kafka-1
+  ports:
+  - port: 9094
+    targetPort: 9094
+    nodePort: 30093
+    name: external
+
+---
+# External NodePort service for kafka-2
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-2-external
+  labels:
+    app: kafka
+spec:
+  type: NodePort
+  selector:
+    statefulset.kubernetes.io/pod-name: kafka-2
+  ports:
+  - port: 9094
+    targetPort: 9094
+    nodePort: 30094
+    name: external
