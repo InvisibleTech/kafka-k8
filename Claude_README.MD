@@ -4,6 +4,8 @@ This repository contains Kubernetes manifests for deploying a 3-node Apache Kafk
 
 ## Architecture Overview
 
+![Kafka Cluster Architecture](kafka-architecture.svg)
+
 - **3 Kafka brokers** running in KRaft mode (combined broker + controller)
 - **Persistent storage** via StatefulSet with 10Gi per broker
 - **Internal communication** via headless service within the cluster
